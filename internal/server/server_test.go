@@ -153,6 +153,25 @@ func TestNativeFrontendIsServedAtGatewayRoot(t *testing.T) {
 	}
 }
 
+func TestNativeFrontendExposesVersionAndInteractiveFanCurve(t *testing.T) {
+	handler := NewHandler("/app/ha500_toolbox", &fakeBackend{})
+	response := request(t, handler, http.MethodGet, "/app/ha500_toolbox/", "", false)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	body := response.Body.String()
+	for _, marker := range []string{`id="app-version"`, `type="module"`, `src="app.js"`} {
+		if !strings.Contains(body, marker) {
+			t.Errorf("frontend is missing %s", marker)
+		}
+	}
+
+	module := request(t, handler, http.MethodGet, "/app/ha500_toolbox/fan-curve.mjs", "", false)
+	if module.Code != http.StatusOK || !strings.Contains(module.Header().Get("Content-Type"), "javascript") {
+		t.Fatalf("fan curve module status = %d, content type = %q", module.Code, module.Header().Get("Content-Type"))
+	}
+}
+
 func TestGatewayRootWithoutSlashRedirectsSoRelativeAssetsStayInsideApp(t *testing.T) {
 	handler := NewHandler("/app/ha500_toolbox", &fakeBackend{})
 	response := request(t, handler, http.MethodGet, "/app/ha500_toolbox", "", false)
