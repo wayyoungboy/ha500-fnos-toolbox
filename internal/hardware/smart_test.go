@@ -36,6 +36,21 @@ exit 64
 	}
 }
 
+func TestSmartctlReaderRejectsOperationalExitBitsEvenWithValidJSON(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "smartctl")
+	body := `#!/bin/sh
+printf '%s\n' '{"serial_number":"PRIVATE-SERIAL-1234","model_name":"Example Disk","temperature":{"current":41}}'
+exit 4
+`
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewSmartctlReader(script).Read(context.Background(), "sda"); err == nil {
+		t.Fatal("SMART command failure bit was accepted")
+	}
+}
+
 func TestSmartctlReaderEnforcesTimeoutAndBoundedOutput(t *testing.T) {
 	t.Run("timeout", func(t *testing.T) {
 		script := filepath.Join(t.TempDir(), "smartctl")
