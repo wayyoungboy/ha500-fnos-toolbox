@@ -143,3 +143,15 @@ test("a saved disk source remains visible when the disk temperature is unavailab
     available: false,
   });
 });
+
+test("an unavailable temperature source does not draw a false zero-degree marker", () => {
+  const markup = buildFanCurveChart({
+    points: curve,
+    currentTemperature: null,
+    criticalTemperature: 80,
+    sourceLabel: "硬盘温度",
+  });
+
+  assert.doesNotMatch(markup, /current-marker/);
+  assert.doesNotMatch(markup, /当前 0\.0°C/);
+});
