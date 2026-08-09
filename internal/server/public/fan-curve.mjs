@@ -37,6 +37,20 @@ export function policySectionsForMode(mode) {
   };
 }
 
+export function shouldRefreshFanEditor({ selected, dirty }) {
+  return Boolean(selected) && !dirty;
+}
+
+export function prepareCurveForSubmission(points) {
+  const normalized = normalizeCurvePoints(points);
+  for (let index = 1; index < normalized.length; index += 1) {
+    if (normalized[index].temperature_c === normalized[index - 1].temperature_c) {
+      throw new Error("温度节点不能重复");
+    }
+  }
+  return normalized;
+}
+
 function linePath(points) {
   return points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
 }
