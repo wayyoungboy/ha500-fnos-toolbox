@@ -102,8 +102,8 @@ export function buildFanCurveChart({ points, currentTemperature, criticalTempera
   const xTicks = [20, 40, 60, 80, 100].filter((tick) => tick <= xMaximum);
   if (!xTicks.includes(xMaximum)) xTicks.push(xMaximum);
   const yTicks = [0, 25, 50, 75, 100];
-  const current = Number(currentTemperature);
-  const hasCurrent = Number.isFinite(current);
+  const current = typeof currentTemperature === "number" ? currentTemperature : Number.NaN;
+	const hasCurrent = Number.isFinite(current);
   const currentDuty = hasCurrent ? calculateDutyPercent(normalized, current) : 0;
   const critical = clamp(Number(criticalTemperature) || 80, xMinimum, xMaximum);
 
