@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	defaultLogBytes   = 1 << 20
-	defaultLogBackups = 1
+	defaultLogBytes       = 1 << 20
+	defaultLogBackups     = 1
+	diskTemperaturePeriod = 30 * time.Second
 )
 
 var (
@@ -31,13 +32,19 @@ var (
 )
 
 type Options struct {
-	SysRoot       string
-	CPUInfoPath   string
-	SettingsPath  string
-	LogPath       string
-	Version       string
-	ConflictCheck func() string
-	Settle        func(context.Context) error
+	SysRoot          string
+	CPUInfoPath      string
+	SettingsPath     string
+	LogPath          string
+	Version          string
+	SmartctlPath     string
+	DiskTemperatures DiskTemperatureProvider
+	ConflictCheck    func() string
+	Settle           func(context.Context) error
+}
+
+type DiskTemperatureProvider interface {
+	Snapshot(context.Context, map[int]hardware.Disk) ([]hardware.DiskTemperature, error)
 }
 
 type Service struct {
@@ -51,6 +58,7 @@ type Service struct {
 	status        server.Status
 	fanHardware   hardware.FanHardware
 	fanController *control.FanController
+	diskTemps     DiskTemperatureProvider
 	closed        bool
 }
 
@@ -60,6 +68,12 @@ func New(options Options) (*Service, error) {
 	}
 	if options.CPUInfoPath == "" {
 		options.CPUInfoPath = "/proc/cpuinfo"
+	}
+	if options.SmartctlPath == "" {
+		options.SmartctlPath = "/usr/sbin/smartctl"
+	}
+	if options.DiskTemperatures == nil {
+		options.DiskTemperatures = hardware.NewSMARTMonitor(hardware.NewSmartctlReader(options.SmartctlPath), diskTemperaturePeriod)
 	}
 	if options.ConflictCheck == nil {
 		options.ConflictCheck = DefaultConflictCheck
@@ -99,6 +113,7 @@ func New(options Options) (*Service, error) {
 		logger:     slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		settings:   settings,
 		ledControl: server.LEDControl{Mode: control.LEDAutomatic},
+		diskTemps:  options.DiskTemperatures,
 	}
 	service.logger.Info("HA500 toolbox service starting", "version", options.Version)
 	service.refresh(context.Background())
@@ -121,6 +136,7 @@ func (service *Service) Run(ctx context.Context) {
 func (service *Service) refresh(ctx context.Context) {
 	report := hardware.DetectHA500(service.options.SysRoot, service.options.CPUInfoPath)
 	disks, diskErr := hardware.DiscoverDisks(service.options.SysRoot)
+	diskTemperatures, diskTemperatureErr := service.diskTemps.Snapshot(ctx, disks)
 	fans, fanErr := hardware.DiscoverFans(service.options.SysRoot)
 	conflict := service.options.ConflictCheck()
 
@@ -150,9 +166,36 @@ func (service *Service) refresh(ctx context.Context) {
 		LED:         service.ledControl,
 		UpdatedAt:   time.Now().Format(time.RFC3339Nano),
 	}
+	cpuSource := server.TemperatureSourceStatus{ID: "cpu", Kind: "cpu", Label: "CPU Package"}
+	if fans.Temperature.InputPath != "" {
+		temperature := float64(fans.Temperature.MilliCelsius) / 1000
+		cpuSource.TemperatureC = &temperature
+		cpuSource.Available = true
+	}
+	status.TemperatureSources = append(status.TemperatureSources, cpuSource)
+	bayByPort := make(map[int]int, len(service.settings.BayPortMap))
 	for bay, port := range service.settings.BayPortMap {
+		bayByPort[port] = bay + 1
 		disk, present := disks[port]
 		status.Disks = append(status.Disks, server.DiskStatus{Bay: bay + 1, ControllerPort: port, Present: present, Device: disk.Device, Model: disk.Model})
+	}
+	for _, disk := range diskTemperatures {
+		location := fmt.Sprintf("ASM PORT %d", disk.ControllerPort)
+		if bay, ok := bayByPort[disk.ControllerPort]; ok {
+			location = fmt.Sprintf("DISK %d", bay)
+		}
+		model := disk.Model
+		if model == "" {
+			model = "未知型号"
+		}
+		source := server.TemperatureSourceStatus{
+			ID: disk.SourceID, Kind: "disk", Label: fmt.Sprintf("%s · %s · ID %s", location, model, disk.DisplayID), Available: disk.Available,
+		}
+		if disk.Available {
+			temperature := disk.TemperatureC
+			source.TemperatureC = &temperature
+		}
+		status.TemperatureSources = append(status.TemperatureSources, source)
 	}
 	for _, channel := range fans.Channels {
 		policy, exists := service.settings.FanPolicies[channel.Number]
@@ -167,6 +210,9 @@ func (service *Service) refresh(ctx context.Context) {
 	var lastErrors []string
 	if diskErr != nil {
 		lastErrors = append(lastErrors, diskErr.Error())
+	}
+	if diskTemperatureErr != nil {
+		lastErrors = append(lastErrors, "disk temperature: "+diskTemperatureErr.Error())
 	}
 	if fanErr != nil {
 		lastErrors = append(lastErrors, fanErr.Error())
@@ -186,11 +232,16 @@ func (service *Service) refresh(ctx context.Context) {
 	}
 	if report.Supported && fanErr == nil && conflict == "" {
 		sensor := fileSensorIO{}
-		temperaturePaths := map[string]string{}
+		temperatureValues := temperatureMap{}
 		if fans.Temperature.InputPath != "" {
-			temperaturePaths["cpu"] = fans.Temperature.InputPath
+			temperatureValues["cpu"] = float64(fans.Temperature.MilliCelsius) / 1000
 		}
-		controller := control.NewFanController(sensor, fans.Channels, temperaturePaths)
+		for _, disk := range diskTemperatures {
+			if disk.Available {
+				temperatureValues[disk.SourceID] = disk.TemperatureC
+			}
+		}
+		controller := control.NewFanControllerWithTemperatureReader(sensor, fans.Channels, temperatureValues)
 		service.fanController = controller
 		if hasControlledPolicy(service.settings.FanPolicies) {
 			if err := controller.Apply(ctx, service.settings.FanPolicies); err != nil {
@@ -282,6 +333,19 @@ func (service *Service) SetFanPolicy(ctx context.Context, channel int, policy co
 		if !service.settings.VerifiedFans[channel] {
 			service.mu.Unlock()
 			return fmt.Errorf("fan channel %d has not passed software-control verification", channel)
+		}
+		if policy.Mode == control.ModeFixed || policy.Mode == control.ModeCurve {
+			sourceAvailable := false
+			for _, source := range service.status.TemperatureSources {
+				if source.ID == policy.TemperatureSource && source.Available {
+					sourceAvailable = true
+					break
+				}
+			}
+			if !sourceAvailable {
+				service.mu.Unlock()
+				return control.ErrTemperatureUnavailable
+			}
 		}
 	}
 	next := cloneSettings(service.settings)
@@ -392,6 +456,16 @@ func DefaultConflictCheck() string {
 }
 
 type fileSensorIO struct{}
+
+type temperatureMap map[string]float64
+
+func (temperatures temperatureMap) ReadTemperature(source string) (float64, error) {
+	value, ok := temperatures[source]
+	if !ok {
+		return 0, control.ErrTemperatureUnavailable
+	}
+	return value, nil
+}
 
 func (fileSensorIO) ReadInt(path string) (int, error) {
 	data, err := os.ReadFile(path)

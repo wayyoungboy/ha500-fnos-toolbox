@@ -54,17 +54,26 @@ type LEDControl struct {
 	States [5]bool         `json:"states"`
 }
 
+type TemperatureSourceStatus struct {
+	ID           string   `json:"id"`
+	Kind         string   `json:"kind"`
+	Label        string   `json:"label"`
+	TemperatureC *float64 `json:"temperature_c,omitempty"`
+	Available    bool     `json:"available"`
+}
+
 type Status struct {
-	Version     string         `json:"version"`
-	Running     bool           `json:"running"`
-	MonitorOnly bool           `json:"monitor_only"`
-	Hardware    HardwareStatus `json:"hardware"`
-	Disks       []DiskStatus   `json:"disks"`
-	Fans        []FanStatus    `json:"fans"`
-	Temperature float64        `json:"temperature_c"`
-	LED         LEDControl     `json:"led_control"`
-	LastError   string         `json:"last_error,omitempty"`
-	UpdatedAt   string         `json:"updated_at"`
+	Version            string                    `json:"version"`
+	Running            bool                      `json:"running"`
+	MonitorOnly        bool                      `json:"monitor_only"`
+	Hardware           HardwareStatus            `json:"hardware"`
+	Disks              []DiskStatus              `json:"disks"`
+	Fans               []FanStatus               `json:"fans"`
+	Temperature        float64                   `json:"temperature_c"`
+	TemperatureSources []TemperatureSourceStatus `json:"temperature_sources"`
+	LED                LEDControl                `json:"led_control"`
+	LastError          string                    `json:"last_error,omitempty"`
+	UpdatedAt          string                    `json:"updated_at"`
 }
 
 type LogItem struct {

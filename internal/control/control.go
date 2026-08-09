@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -124,8 +125,8 @@ func (policy FanPolicy) Validate() error {
 	default:
 		return fmt.Errorf("unsupported fan mode %q", policy.Mode)
 	}
-	if policy.TemperatureSource == "" {
-		return errors.New("controlled policy requires a temperature source")
+	if !validTemperatureSource(policy.TemperatureSource) {
+		return errors.New("temperature source must be CPU Package or a disk fingerprint")
 	}
 	if policy.MinDutyPercent < 20 || policy.MinDutyPercent > 100 {
 		return errors.New("minimum duty must be between 20 and 100 percent")
@@ -159,6 +160,20 @@ func (policy FanPolicy) Validate() error {
 	}
 	return nil
 }
+
+func validTemperatureSource(source string) bool {
+	if source == "cpu" {
+		return true
+	}
+	const prefix = "disk:"
+	if len(source) != len(prefix)+sha256HexLength || source[:len(prefix)] != prefix {
+		return false
+	}
+	_, err := hex.DecodeString(source[len(prefix):])
+	return err == nil
+}
+
+const sha256HexLength = 64
 
 type PolicySet map[int]FanPolicy
 
@@ -209,6 +224,27 @@ func (policies PolicySet) Duties(temperatures map[string]float64) (map[int]int, 
 type SensorIO interface {
 	ReadInt(path string) (int, error)
 	WriteInt(path string, value int) error
+}
+
+type TemperatureReader interface {
+	ReadTemperature(string) (float64, error)
+}
+
+type pathTemperatureReader struct {
+	sensors SensorIO
+	paths   map[string]string
+}
+
+func (reader pathTemperatureReader) ReadTemperature(source string) (float64, error) {
+	path, ok := reader.paths[source]
+	if !ok {
+		return 0, ErrTemperatureUnavailable
+	}
+	value, err := reader.sensors.ReadInt(path)
+	if err != nil {
+		return 0, err
+	}
+	return float64(value) / 1000, nil
 }
 
 type VerifyOptions struct {
@@ -283,10 +319,14 @@ func VerifySoftwareControl(ctx context.Context, sensors SensorIO, channel hardwa
 type FanController struct {
 	sensors      SensorIO
 	channels     map[int]hardware.FanChannel
-	temperatures map[string]string
+	temperatures TemperatureReader
 }
 
 func NewFanController(sensors SensorIO, channels []hardware.FanChannel, temperatures map[string]string) *FanController {
+	return NewFanControllerWithTemperatureReader(sensors, channels, pathTemperatureReader{sensors: sensors, paths: temperatures})
+}
+
+func NewFanControllerWithTemperatureReader(sensors SensorIO, channels []hardware.FanChannel, temperatures TemperatureReader) *FanController {
 	indexed := make(map[int]hardware.FanChannel, len(channels))
 	for _, channel := range channels {
 		indexed[channel.Number] = channel
@@ -319,17 +359,16 @@ func (controller *FanController) Apply(_ context.Context, policies PolicySet) er
 		if _, exists := temperatures[policy.TemperatureSource]; exists {
 			continue
 		}
-		path, ok := controller.temperatures[policy.TemperatureSource]
-		if !ok {
+		if controller.temperatures == nil {
 			_ = controller.forceFull(owned)
 			return ErrTemperatureUnavailable
 		}
-		value, err := controller.sensors.ReadInt(path)
+		value, err := controller.temperatures.ReadTemperature(policy.TemperatureSource)
 		if err != nil {
 			_ = controller.forceFull(owned)
 			return ErrTemperatureUnavailable
 		}
-		temperatures[policy.TemperatureSource] = float64(value) / 1000
+		temperatures[policy.TemperatureSource] = value
 	}
 	duties, err := policies.Duties(temperatures)
 	if err != nil {

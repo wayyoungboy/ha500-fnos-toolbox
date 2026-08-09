@@ -36,11 +36,17 @@ func newPreviewBackend() *previewBackend {
 func (backend *previewBackend) Snapshot(context.Context) (server.Status, error) {
 	backend.mu.Lock()
 	defer backend.mu.Unlock()
+	cpuTemperature := 42.0
+	diskTemperature := 39.0
 	return server.Status{
 		Version: "0.1.1", Running: true, Hardware: server.HardwareStatus{Supported: true, Match: "ha500-reference-fingerprint", ASM1166: true, GPIO: true, FanChip: "it8620", FanDriver: true},
 		Disks:       []server.DiskStatus{{Bay: 1, ControllerPort: 1, Present: true, Device: "sdb", Model: "Disk A"}, {Bay: 2, ControllerPort: 2}, {Bay: 3, ControllerPort: 3, Present: true, Device: "sda", Model: "Disk B"}, {Bay: 4, ControllerPort: 4, Present: true, Device: "sdc", Model: "Disk C"}, {Bay: 5, ControllerPort: 5}},
 		Fans:        []server.FanStatus{{Number: 2, Name: "机箱风扇", RPM: 3550, PWM: 255, DutyPercent: 100, Verified: true, Policy: backend.settings.FanPolicies[2]}, {Number: 3, Name: "系统风扇", RPM: 1790, PWM: 143, DutyPercent: 56, Verified: true, Policy: backend.settings.FanPolicies[3]}},
 		Temperature: 42, LED: backend.led, UpdatedAt: time.Now().Format(time.RFC3339),
+		TemperatureSources: []server.TemperatureSourceStatus{
+			{ID: "cpu", Kind: "cpu", Label: "CPU Package", TemperatureC: &cpuTemperature, Available: true},
+			{ID: "disk:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Kind: "disk", Label: "DISK 1 · Disk A · ID A1B2C3", TemperatureC: &diskTemperature, Available: true},
+		},
 	}, nil
 }
 
