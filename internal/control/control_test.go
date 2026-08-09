@@ -181,4 +181,3 @@ func TestMonitorModeNeverWrites(t *testing.T) {
 		t.Fatalf("monitor mode wrote hardware: %v", fake.writes)
 	}
 }
-

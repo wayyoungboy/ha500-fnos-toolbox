@@ -37,4 +37,3 @@ func TestStoreRoundTripsPrivateSettingsAtomically(t *testing.T) {
 		t.Fatalf("settings mode = %o; want 600", info.Mode().Perm())
 	}
 }
-
