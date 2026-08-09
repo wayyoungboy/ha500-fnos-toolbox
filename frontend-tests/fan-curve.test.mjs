@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -53,4 +54,14 @@ test("policy mode only exposes fields relevant to that mode", () => {
     curve: false,
     fixed: false,
   });
+});
+
+test("fan layout constrains the wide curve canvas inside the mobile page", async () => {
+  const stylesheet = await readFile(
+    new URL("../internal/server/public/styles.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(stylesheet, /\.fan-layout>\*\{min-width:0\}/);
+  assert.match(stylesheet, /\.fan-curve-chart\{[^}]*max-width:100%/);
 });
