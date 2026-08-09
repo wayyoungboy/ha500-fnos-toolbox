@@ -25,7 +25,10 @@ const (
 	defaultLogBackups = 1
 )
 
-var ErrControlConflict = errors.New("another fan-control service is active")
+var (
+	ErrControlConflict     = errors.New("another fan-control service is active")
+	ErrUnsupportedHardware = errors.New("hardware is not a verified HA500")
+)
 
 type Options struct {
 	SysRoot       string
@@ -261,6 +264,10 @@ func (service *Service) SetFanPolicy(ctx context.Context, channel int, policy co
 	}
 	service.mu.Lock()
 	if policy.Mode != control.ModeMonitor {
+		if !service.status.Hardware.Supported {
+			service.mu.Unlock()
+			return ErrUnsupportedHardware
+		}
 		known := false
 		for _, fan := range service.fanHardware.Channels {
 			if fan.Number == channel {
@@ -295,6 +302,10 @@ func (service *Service) VerifyFan(ctx context.Context, channel int, allowLowerin
 		return control.Verification{}, fmt.Errorf("%w: %s", ErrControlConflict, conflict)
 	}
 	service.mu.RLock()
+	if !service.status.Hardware.Supported {
+		service.mu.RUnlock()
+		return control.Verification{}, ErrUnsupportedHardware
+	}
 	var selected hardware.FanChannel
 	for _, fan := range service.fanHardware.Channels {
 		if fan.Number == channel {

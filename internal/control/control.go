@@ -305,7 +305,8 @@ func (controller *FanController) Apply(_ context.Context, policies PolicySet) er
 	}
 	owned := controller.ownedChannels(policies)
 	for _, channel := range owned {
-		if _, err := controller.sensors.ReadInt(channel.RPMPath); err != nil {
+		rpm, err := controller.sensors.ReadInt(channel.RPMPath)
+		if err != nil || rpm <= 0 {
 			_ = controller.forceFull(owned)
 			return ErrFanStopped
 		}

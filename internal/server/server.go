@@ -219,7 +219,11 @@ func NewHandler(gatewayPrefix string, backend Backend) http.Handler {
 
 	prefix := strings.TrimSuffix(gatewayPrefix, "/")
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if prefix != "" && (request.URL.Path == prefix || strings.HasPrefix(request.URL.Path, prefix+"/")) {
+		if prefix != "" && request.URL.Path == prefix {
+			http.Redirect(writer, request, prefix+"/", http.StatusPermanentRedirect)
+			return
+		}
+		if prefix != "" && strings.HasPrefix(request.URL.Path, prefix+"/") {
 			clone := request.Clone(request.Context())
 			clone.URL.Path = strings.TrimPrefix(request.URL.Path, prefix)
 			if clone.URL.Path == "" {
