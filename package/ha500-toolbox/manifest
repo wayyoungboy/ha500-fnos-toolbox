@@ -1,5 +1,5 @@
 appname               = ha500_toolbox
-version               = 0.1.1
+version               = 0.2.0
 display_name          = HA500 飞牛工具箱
 desc                  = 奥睿科 HA500 原生硬件工具箱，提供五盘位蓝色硬盘灯、每路风扇独立策略、软件控制验证和运行诊断。默认只读，未通过硬件与风扇验证时不会写入控制接口。
 arch                  = x86_64
@@ -15,4 +15,4 @@ install_type          = root
 desktop_uidir         = ui
 desktop_applaunchname = ha500_toolbox.main
 os_min_version        = 1.2.0302
-changelog             = 新增实时 PWM 温控曲线、曲线节点即时预览、按控制模式显示相关字段，并在界面显示应用版本。
+changelog             = 风扇温度源新增按硬盘序列号指纹跟踪的 SMART 温度；支持盘符变化、休眠盘免唤醒、低频缓存和温度失效全速保护。
