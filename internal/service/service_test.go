@@ -7,7 +7,16 @@ import (
 	"testing"
 
 	"github.com/wayyoungboy/ha500-fnos-toolbox/internal/control"
+	"github.com/wayyoungboy/ha500-fnos-toolbox/internal/hardware"
 )
+
+type fakeDiskTemperatureProvider struct {
+	items []hardware.DiskTemperature
+}
+
+func (provider fakeDiskTemperatureProvider) Snapshot(context.Context, map[int]hardware.Disk) ([]hardware.DiskTemperature, error) {
+	return provider.items, nil
+}
 
 func TestServiceStartsFailClosedWithSafeDefaults(t *testing.T) {
 	root := t.TempDir()
@@ -33,6 +42,36 @@ func TestServiceStartsFailClosedWithSafeDefaults(t *testing.T) {
 	}
 	if status.Hardware.Supported || !status.MonitorOnly || status.Version != "0.1.0" {
 		t.Fatalf("status = %+v; want unsupported monitor-only service", status)
+	}
+}
+
+func TestStatusPublishesDiskTemperatureSourcesWithoutPlainSerial(t *testing.T) {
+	root := t.TempDir()
+	source := hardware.DiskTemperatureSourceID("PRIVATE-SERIAL-1234")
+	service, err := New(Options{
+		SysRoot:      root,
+		CPUInfoPath:  filepath.Join(root, "proc/cpuinfo"),
+		SettingsPath: filepath.Join(root, "var/settings.json"),
+		LogPath:      filepath.Join(root, "var/toolbox.log"),
+		Version:      "0.2.0",
+		DiskTemperatures: fakeDiskTemperatureProvider{items: []hardware.DiskTemperature{
+			{SourceID: source, DisplayID: "A1B2C3", Device: "sda", Model: "Example Disk", ControllerPort: 1, TemperatureC: 40, Available: true},
+		}},
+		ConflictCheck: func() string { return "" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	status, err := service.Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(status.TemperatureSources) != 2 || status.TemperatureSources[1].ID != source || status.TemperatureSources[1].TemperatureC == nil || *status.TemperatureSources[1].TemperatureC != 40 {
+		t.Fatalf("temperature sources = %+v", status.TemperatureSources)
+	}
+	if status.TemperatureSources[1].Label == "" {
+		t.Fatal("disk temperature source has no human-readable label")
 	}
 }
 

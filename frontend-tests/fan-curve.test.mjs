@@ -8,6 +8,7 @@ import {
   policySectionsForMode,
   prepareCurveForSubmission,
   shouldRefreshFanEditor,
+  temperatureSourceOptions,
 } from "../internal/server/public/fan-curve.mjs";
 
 const curve = [
@@ -110,4 +111,35 @@ test("fan editor exposes decimal temperature inputs and selected-state semantics
     /id="critical-temperature"[^>]*step="any"/,
   );
   assert.match(application, /aria-pressed=/);
+});
+
+test("disk temperature sources are selectable by stable fingerprint without exposing serials", () => {
+  const options = temperatureSourceOptions(
+    [
+      { id: "cpu", kind: "cpu", label: "CPU Package", temperature_c: 54.2, available: true },
+      { id: `disk:${"a".repeat(64)}`, kind: "disk", label: "DISK 1 · Example Disk · ID A1B2C3", temperature_c: 40, available: true },
+    ],
+    `disk:${"a".repeat(64)}`,
+  );
+
+  assert.deepEqual(options, [
+    { value: "cpu", label: "CPU Package · 54.2°C", currentTemperature: 54.2, available: true },
+    { value: `disk:${"a".repeat(64)}`, label: "硬盘 · DISK 1 · Example Disk · ID A1B2C3 · 40.0°C", currentTemperature: 40, available: true },
+  ]);
+  assert.doesNotMatch(JSON.stringify(options), /PRIVATE-SERIAL/);
+});
+
+test("a saved disk source remains visible when the disk temperature is unavailable", () => {
+  const missing = `disk:${"b".repeat(64)}`;
+  const options = temperatureSourceOptions(
+    [{ id: "cpu", kind: "cpu", label: "CPU Package", temperature_c: 52, available: true }],
+    missing,
+  );
+
+  assert.deepEqual(options.at(-1), {
+    value: missing,
+    label: "硬盘 · 已保存的硬盘（当前未找到或温度不可用）",
+    currentTemperature: null,
+    available: false,
+  });
 });

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/wayyoungboy/ha500-fnos-toolbox/internal/hardware"
@@ -95,9 +96,33 @@ func TestPolicyValidationRejectsUnsafeSettings(t *testing.T) {
 	}
 }
 
+func TestPolicyTemperatureSourceMustBeCPUOrDiskFingerprint(t *testing.T) {
+	valid := FanPolicy{Mode: ModeFixed, TemperatureSource: "disk:" + strings.Repeat("a", 64), MinDutyPercent: 35, FixedDutyPercent: 56, CriticalTemperatureC: 80}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid disk source rejected: %v", err)
+	}
+	for _, source := range []string{"sda", "disk:PRIVATE-SERIAL", "disk:" + strings.Repeat("g", 64), "disk:" + strings.Repeat("a", 63)} {
+		policy := valid
+		policy.TemperatureSource = source
+		if err := policy.Validate(); err == nil {
+			t.Fatalf("unsafe temperature source %q was accepted", source)
+		}
+	}
+}
+
 type fakeSensorIO struct {
 	values map[string]int
 	writes [][2]int
+}
+
+type fakeTemperatureReader map[string]float64
+
+func (reader fakeTemperatureReader) ReadTemperature(source string) (float64, error) {
+	value, ok := reader[source]
+	if !ok {
+		return 0, os.ErrNotExist
+	}
+	return value, nil
 }
 
 func (fake *fakeSensorIO) ReadInt(path string) (int, error) {
@@ -168,6 +193,28 @@ func TestFanControllerAppliesIndependentPoliciesAndFailsAllOwnedFansSafe(t *test
 	}
 	if fake.values["/pwm2"] != 255 || fake.values["/pwm3"] != 255 {
 		t.Fatalf("owned fans were not forced to full speed: %v", fake.values)
+	}
+}
+
+func TestFanControllerUsesDiskTemperatureAndFailsSafeWhenItDisappears(t *testing.T) {
+	diskSource := "disk:" + strings.Repeat("b", 64)
+	fake := &fakeSensorIO{values: map[string]int{"/fan3": 1790, "/pwm3": 120, "/enable3": 1}}
+	temperatures := fakeTemperatureReader{diskSource: 50}
+	controller := NewFanControllerWithTemperatureReader(fake, []hardware.FanChannel{{Number: 3, RPMPath: "/fan3", PWMPath: "/pwm3", EnablePath: "/enable3", Verified: true}}, temperatures)
+	policy := PolicySet{3: {Mode: ModeCurve, TemperatureSource: diskSource, MinDutyPercent: 35, CriticalTemperatureC: 80, Curve: Curve{{40, 35}, {60, 55}, {80, 100}}}}
+
+	if err := controller.Apply(context.Background(), policy); err != nil {
+		t.Fatal(err)
+	}
+	if fake.values["/pwm3"] != percentToPWM(45) {
+		t.Fatalf("disk curve PWM = %d; want %d", fake.values["/pwm3"], percentToPWM(45))
+	}
+	delete(temperatures, diskSource)
+	if err := controller.Apply(context.Background(), policy); !errors.Is(err, ErrTemperatureUnavailable) {
+		t.Fatalf("Apply error = %v; want ErrTemperatureUnavailable", err)
+	}
+	if fake.values["/pwm3"] != 255 {
+		t.Fatalf("missing disk temperature PWM = %d; want fail-safe 255", fake.values["/pwm3"])
 	}
 }
 

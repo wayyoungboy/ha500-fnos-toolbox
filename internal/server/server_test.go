@@ -93,6 +93,25 @@ func TestStatusWorksThroughFnOSGatewayPrefix(t *testing.T) {
 	}
 }
 
+func TestStatusNeverReturnsPlainDiskSerial(t *testing.T) {
+	const serial = "PRIVATE-SERIAL-1234"
+	temperature := 40.0
+	backend := &fakeBackend{status: Status{TemperatureSources: []TemperatureSourceStatus{
+		{ID: "disk:0f00", Kind: "disk", Label: "DISK 1 · Example Disk · ID A1B2C3", TemperatureC: &temperature, Available: true},
+	}}}
+	handler := NewHandler("/app/ha500_toolbox", backend)
+	response := request(t, handler, http.MethodGet, "/api/status", "", true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	if strings.Contains(response.Body.String(), serial) {
+		t.Fatalf("status leaked plain disk serial: %s", response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"kind":"disk"`) || !strings.Contains(response.Body.String(), `"temperature_c":40`) {
+		t.Fatalf("status omitted disk temperature source: %s", response.Body.String())
+	}
+}
+
 func TestUpdatesOnlyRequestedFanPolicy(t *testing.T) {
 	backend := &fakeBackend{settings: config.Settings{BayPortMap: [5]int{1, 2, 3, 4, 5}, FanPolicies: control.PolicySet{
 		2: {Mode: control.ModeFixed, FixedDutyPercent: 100, MinDutyPercent: 35, CriticalTemperatureC: 80, TemperatureSource: "cpu"},
