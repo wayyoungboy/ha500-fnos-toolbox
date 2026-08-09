@@ -1,0 +1,18 @@
+{
+  ".url": {
+    "ha500_toolbox.main": {
+      "title": "HA500 飞牛工具箱",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/ha500_toolbox",
+      "gatewaySocket": "app.sock",
+      "url": "/app/ha500_toolbox",
+      "allUsers": false,
+      "control": {
+        "accessPerm": "readonly"
+      }
+    }
+  }
+}
+

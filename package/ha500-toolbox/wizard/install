@@ -1,0 +1,25 @@
+[
+  {
+    "stepTitle": "确认硬件与安全边界",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "本测试版只适用于奥睿科 HA500。安装后风扇默认为只读监控；停止 CoolerControl/fancontrol 并完成单路软件控制验证后，才能启用写控制。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_model_confirm",
+        "label": "请输入 HA500 以确认型号",
+        "rules": [
+          {
+            "required": true,
+            "message": "必须确认机器型号",
+            "min": 5,
+            "max": 5
+          }
+        ]
+      }
+    ]
+  }
+]
+

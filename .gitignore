@@ -1,0 +1,4 @@
+/dist/
+/package/ha500-toolbox/app/bin/ha500-toolbox
+/coverage.out
+.DS_Store

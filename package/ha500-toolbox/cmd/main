@@ -1,0 +1,138 @@
+#!/bin/bash
+
+APP_NAME="ha500_toolbox"
+DAEMON="${TRIM_APPDEST}/bin/ha500-toolbox"
+LOG_FILE="${TRIM_PKGVAR}/${APP_NAME}.log"
+CRASH_LOG="${TRIM_PKGVAR}/${APP_NAME}.crash.log"
+PID_FILE="${TRIM_PKGVAR}/${APP_NAME}.pid"
+MODEL_MARKER="${TRIM_PKGVAR}/ha500-model-confirmed"
+SETTINGS_FILE="${TRIM_PKGVAR}/settings.json"
+SOCKET_PATH="${TRIM_APPDEST}/app.sock"
+
+valid_pid() {
+    case "${1:-}" in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+check_process() {
+    local pid="${1:-}"
+    local command_line
+    valid_pid "${pid}" || return 1
+    [ -r "/proc/${pid}/cmdline" ] || return 1
+    command_line="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null)"
+    case "${command_line}" in
+        "${DAEMON}"*|*" ${DAEMON}"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+read_pid() {
+    [ -r "${PID_FILE}" ] || return 1
+    head -n 1 "${PID_FILE}" | tr -d '[:space:]'
+}
+
+status_process() {
+    local pid
+    pid="$(read_pid 2>/dev/null)" || return 3
+    if check_process "${pid}"; then
+        return 0
+    fi
+    rm -f -- "${PID_FILE}" "${SOCKET_PATH}"
+    return 3
+}
+
+load_fan_driver() {
+    local modprobe_bin=""
+    for candidate in /usr/sbin/modprobe /sbin/modprobe /usr/bin/modprobe /bin/modprobe; do
+        if [ -x "${candidate}" ]; then
+            modprobe_bin="${candidate}"
+            break
+        fi
+    done
+    [ -n "${modprobe_bin}" ] || return 0
+    "${modprobe_bin}" it87 force_id=0x8620 >> "${CRASH_LOG}" 2>&1 || true
+}
+
+emergency_failsafe() {
+    HA500_TOOLBOX_CONFIG="${SETTINGS_FILE}" \
+    HA500_TOOLBOX_SYS_ROOT="/sys" \
+    "${DAEMON}" --failsafe >> "${CRASH_LOG}" 2>&1 || true
+}
+
+start_process() {
+    local pid count
+    if status_process; then
+        return 0
+    fi
+    [ -x "${DAEMON}" ] || {
+        echo "${DAEMON} not found or not executable" >&2
+        return 1
+    }
+    [ -r "${MODEL_MARKER}" ] || {
+        echo "HA500 model confirmation is missing; reinstall the application" >&2
+        return 1
+    }
+    mkdir -p -- "${TRIM_PKGVAR}"
+    chmod 700 -- "${TRIM_PKGVAR}"
+    if [ -f "${CRASH_LOG}" ] && [ "$(wc -c < "${CRASH_LOG}")" -gt 1048576 ]; then
+        mv -f -- "${CRASH_LOG}" "${CRASH_LOG}.1"
+    fi
+    umask 077
+    load_fan_driver
+    rm -f -- "${SOCKET_PATH}"
+    SOCKET_PATH="${SOCKET_PATH}" \
+    GATEWAY_PREFIX="/app/ha500_toolbox" \
+    SERVICE_LOG_FILE="${LOG_FILE}" \
+    HA500_TOOLBOX_CONFIG="${SETTINGS_FILE}" \
+    HA500_TOOLBOX_SYS_ROOT="/sys" \
+    "${DAEMON}" >> "${CRASH_LOG}" 2>&1 &
+    pid=$!
+    printf '%s\n' "${pid}" > "${PID_FILE}"
+    count=0
+    while [ "${count}" -lt 20 ]; do
+        if check_process "${pid}" && [ -S "${SOCKET_PATH}" ]; then
+            return 0
+        fi
+        sleep 1
+        count=$((count + 1))
+    done
+    echo "HA500 toolbox failed to start; see ${CRASH_LOG}" >&2
+    kill -TERM "${pid}" 2>/dev/null || true
+    rm -f -- "${PID_FILE}" "${SOCKET_PATH}"
+    return 1
+}
+
+stop_process() {
+    local pid count
+    pid="$(read_pid 2>/dev/null)" || {
+        rm -f -- "${SOCKET_PATH}"
+        return 0
+    }
+    if ! check_process "${pid}"; then
+        rm -f -- "${PID_FILE}" "${SOCKET_PATH}"
+        return 0
+    fi
+    kill -TERM "${pid}" 2>/dev/null || true
+    count=0
+    while check_process "${pid}" && [ "${count}" -lt 15 ]; do
+        sleep 1
+        count=$((count + 1))
+    done
+    if check_process "${pid}"; then
+        kill -KILL "${pid}" 2>/dev/null || true
+        emergency_failsafe
+    fi
+    rm -f -- "${PID_FILE}" "${SOCKET_PATH}"
+    return 0
+}
+
+case "${1:-}" in
+    start) start_process ;;
+    stop) stop_process ;;
+    restart) stop_process && start_process ;;
+    status) status_process ;;
+    *) echo "Usage: $0 {start|stop|restart|status}" >&2; exit 1 ;;
+esac
+

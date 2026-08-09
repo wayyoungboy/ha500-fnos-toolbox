@@ -432,3 +432,19 @@ func hasControlledPolicy(policies control.PolicySet) bool {
 	}
 	return false
 }
+
+func ForceConfiguredFansFull(sysRoot, settingsPath string) error {
+	settings, err := config.NewStore(settingsPath).LoadOrDefault()
+	if err != nil {
+		return err
+	}
+	fans, err := hardware.DiscoverFans(sysRoot)
+	if err != nil {
+		return err
+	}
+	for index := range fans.Channels {
+		fans.Channels[index].Verified = settings.VerifiedFans[fans.Channels[index].Number]
+	}
+	controller := control.NewFanController(fileSensorIO{}, fans.Channels, nil)
+	return controller.FailSafe(settings.FanPolicies)
+}

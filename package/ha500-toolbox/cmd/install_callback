@@ -1,0 +1,12 @@
+#!/bin/bash
+
+[ "${wizard_model_confirm:-}" = "HA500" ] || {
+    echo "无法保存 HA500 型号确认" >&2
+    exit 1
+}
+mkdir -p -- "${TRIM_PKGVAR}"
+chmod 700 -- "${TRIM_PKGVAR}"
+umask 077
+printf 'confirmed\n' > "${TRIM_PKGVAR}/ha500-model-confirmed"
+exit 0
+

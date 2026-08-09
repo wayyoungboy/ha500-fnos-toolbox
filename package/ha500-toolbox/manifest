@@ -1,0 +1,19 @@
+appname               = ha500_toolbox
+version               = 0.1.0
+display_name          = HA500 飞牛工具箱
+desc                  = 奥睿科 HA500 原生硬件工具箱，提供五盘位蓝色硬盘灯、每路风扇独立策略、软件控制验证和运行诊断。默认只读，未通过硬件与风扇验证时不会写入控制接口。
+arch                  = x86_64
+source                = thirdparty
+maintainer            = Wayyoung
+distributor           = Wayyoung
+maintainer_url        = https://github.com/wayyoungboy/ha500-fnos-toolbox
+distributor_url       = https://github.com/wayyoungboy/ha500-fnos-toolbox
+helpurl               = https://github.com/wayyoungboy/ha500-fnos-toolbox
+ctl_stop              = true
+checkport             = false
+install_type          = root
+desktop_uidir         = ui
+desktop_applaunchname = ha500_toolbox.main
+os_min_version        = 1.2.0302
+changelog             = 首个测试版：合并五盘位硬盘灯、ASM1166 端口映射、每路风扇独立策略、it87 软件控制验证和有界运行日志。
+

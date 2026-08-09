@@ -1,0 +1,53 @@
+#!/bin/bash
+
+fail_install() {
+    local message="$1"
+    echo "${message}" >&2
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        printf '%s\n' "${message}" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+}
+
+[ "${wizard_model_confirm:-}" = "HA500" ] || fail_install "安装已取消：必须输入 HA500 以确认当前机器型号"
+
+asm_count=0
+for device in /sys/bus/pci/devices/*; do
+    [ -r "${device}/vendor" ] || continue
+    [ -r "${device}/device" ] || continue
+    if [ "$(cat "${device}/vendor")" = "0x1b21" ] && [ "$(cat "${device}/device")" = "0x1166" ]; then
+        asm_count=$((asm_count + 1))
+    fi
+done
+[ "${asm_count}" -eq 1 ] || fail_install "安装失败：必须检测到且只能检测到一个 ASM1166 SATA 控制器"
+
+gpio_found=false
+for label in /sys/class/gpio/gpiochip*/label; do
+    [ -r "${label}" ] || continue
+    if [ "$(cat "${label}")" = "INT34C8:00" ]; then
+        gpio_found=true
+        break
+    fi
+done
+[ "${gpio_found}" = true ] || fail_install "安装失败：未找到 HA500 使用的 Intel PCH GPIO 控制器"
+
+grep -qi 'N5105' /proc/cpuinfo || fail_install "安装失败：CPU 与 HA500 硬件指纹不符"
+
+dmi_identity=""
+generic_dmi=true
+for field in sys_vendor product_name board_vendor board_name; do
+    path="/sys/class/dmi/id/${field}"
+    value=""
+    [ -r "${path}" ] && value="$(cat "${path}")"
+    dmi_identity="${dmi_identity} ${value}"
+    if [ -n "${value}" ] && [ "${value}" != "Default string" ]; then
+        generic_dmi=false
+    fi
+done
+if printf '%s' "${dmi_identity}" | grep -Eiq 'HA500'; then
+    exit 0
+fi
+[ "${generic_dmi}" = true ] || fail_install "安装失败：机器型号不是 HA500"
+[ "$(cat /sys/class/dmi/id/chassis_type 2>/dev/null)" = "32" ] || fail_install "安装失败：机箱类型与 HA500 硬件指纹不符"
+exit 0
+
