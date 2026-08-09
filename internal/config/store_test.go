@@ -37,3 +37,17 @@ func TestStoreRoundTripsPrivateSettingsAtomically(t *testing.T) {
 		t.Fatalf("settings mode = %o; want 600", info.Mode().Perm())
 	}
 }
+
+func TestStoreReturnsSafeDefaultsWhenSettingsDoNotExist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	got, err := NewStore(path).LoadOrDefault()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.BayPortMap != [5]int{1, 2, 3, 4, 5} {
+		t.Fatalf("default bay map = %v", got.BayPortMap)
+	}
+	if got.FanPolicies == nil || len(got.FanPolicies) != 0 {
+		t.Fatalf("default fan policies = %#v; want an empty monitor-only set", got.FanPolicies)
+	}
+}
