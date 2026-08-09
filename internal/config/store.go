@@ -12,8 +12,9 @@ import (
 )
 
 type Settings struct {
-	BayPortMap  [5]int            `json:"bay_port_map"`
-	FanPolicies control.PolicySet `json:"fan_policies"`
+	BayPortMap   [5]int            `json:"bay_port_map"`
+	FanPolicies  control.PolicySet `json:"fan_policies"`
+	VerifiedFans map[int]bool      `json:"verified_fans,omitempty"`
 }
 
 type Store struct {
@@ -40,6 +41,14 @@ func (store *Store) Load() (Settings, error) {
 		return Settings{}, fmt.Errorf("invalid saved bay map: %w", err)
 	}
 	return settings, nil
+}
+
+func (store *Store) LoadOrDefault() (Settings, error) {
+	settings, err := store.Load()
+	if errors.Is(err, os.ErrNotExist) {
+		return Settings{BayPortMap: [5]int{1, 2, 3, 4, 5}, FanPolicies: make(control.PolicySet), VerifiedFans: make(map[int]bool)}, nil
+	}
+	return settings, err
 }
 
 func (store *Store) Save(settings Settings) error {

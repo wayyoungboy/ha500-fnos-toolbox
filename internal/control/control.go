@@ -375,6 +375,10 @@ func (controller *FanController) forceFull(channels []hardware.FanChannel) error
 	return result
 }
 
+func (controller *FanController) FailSafe(policies PolicySet) error {
+	return controller.forceFull(controller.ownedChannels(policies))
+}
+
 func percentToPWM(percent int) int {
 	return min(255, max(0, (percent*255+50)/100))
 }
