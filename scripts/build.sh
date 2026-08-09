@@ -14,6 +14,7 @@ trap 'rm -rf -- "${BUILD_TEMP}"' EXIT
 GOTOOLCHAIN=go1.25.12 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
     -o "${BUILD_TEMP}/ha500-toolbox" "${ROOT}/cmd/ha500-toolbox"
+mkdir -p "$(dirname "${BINARY}")"
 install -m 0755 "${BUILD_TEMP}/ha500-toolbox" "${BINARY}"
 python3 "${ROOT}/scripts/validate_package.py"
 
@@ -36,4 +37,3 @@ rm -f -- "${ROOT}/dist/ha500_toolbox.fpk" "${ROOT}/dist/ha500_toolbox_${VERSION}
 }
 mv "${ROOT}/dist/ha500_toolbox.fpk" "${ROOT}/dist/ha500_toolbox_${VERSION}_x86_64.fpk"
 echo "Built ${ROOT}/dist/ha500_toolbox_${VERSION}_x86_64.fpk"
-
