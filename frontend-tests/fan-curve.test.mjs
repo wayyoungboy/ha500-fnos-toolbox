@@ -6,6 +6,8 @@ import {
   buildFanCurveChart,
   calculateDutyPercent,
   policySectionsForMode,
+  prepareCurveForSubmission,
+  shouldRefreshFanEditor,
 } from "../internal/server/public/fan-curve.mjs";
 
 const curve = [
@@ -64,4 +66,43 @@ test("fan layout constrains the wide curve canvas inside the mobile page", async
 
   assert.match(stylesheet, /\.fan-layout>\*\{min-width:0\}/);
   assert.match(stylesheet, /\.fan-curve-chart\{[^}]*max-width:100%/);
+});
+
+test("background refresh preserves an editor with unsaved changes", () => {
+  assert.equal(shouldRefreshFanEditor({ selected: true, dirty: true }), false);
+  assert.equal(shouldRefreshFanEditor({ selected: true, dirty: false }), true);
+  assert.equal(shouldRefreshFanEditor({ selected: false, dirty: true }), false);
+});
+
+test("curve submission uses the same sorted order as its preview", () => {
+  assert.deepEqual(
+    prepareCurveForSubmission([
+      { temperature_c: 80, duty_percent: 100 },
+      { temperature_c: 40.5, duty_percent: 35 },
+      { temperature_c: 60, duty_percent: 55 },
+    ]),
+    [
+      { temperature_c: 40.5, duty_percent: 35 },
+      { temperature_c: 60, duty_percent: 55 },
+      { temperature_c: 80, duty_percent: 100 },
+    ],
+  );
+  assert.throws(
+    () =>
+      prepareCurveForSubmission([
+        { temperature_c: 40, duty_percent: 35 },
+        { temperature_c: 40, duty_percent: 55 },
+      ]),
+    /温度节点不能重复/,
+  );
+});
+
+test("fan editor exposes decimal temperature inputs and selected-state semantics", async () => {
+  const application = await readFile(
+    new URL("../internal/server/public/app.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(application, /step="any"/);
+  assert.match(application, /aria-pressed=/);
 });
