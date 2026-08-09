@@ -16,12 +16,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.25.12"
           cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: go test -race ./...
@@ -39,9 +39,8 @@ jobs:
         env:
           FNPACK: ${{ runner.temp }}/fnpack
         run: scripts/build.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ha500-toolbox-fpk
           path: dist/*.fpk
           if-no-files-found: error
-
