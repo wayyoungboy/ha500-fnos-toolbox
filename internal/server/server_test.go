@@ -152,3 +152,11 @@ func TestNativeFrontendIsServedAtGatewayRoot(t *testing.T) {
 		t.Fatalf("status = %d, body = %.200s", response.Code, response.Body.String())
 	}
 }
+
+func TestGatewayRootWithoutSlashRedirectsSoRelativeAssetsStayInsideApp(t *testing.T) {
+	handler := NewHandler("/app/ha500_toolbox", &fakeBackend{})
+	response := request(t, handler, http.MethodGet, "/app/ha500_toolbox", "", false)
+	if response.Code != http.StatusPermanentRedirect || response.Header().Get("Location") != "/app/ha500_toolbox/" {
+		t.Fatalf("status = %d, location = %q", response.Code, response.Header().Get("Location"))
+	}
+}

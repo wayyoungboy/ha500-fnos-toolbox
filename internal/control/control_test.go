@@ -171,6 +171,18 @@ func TestFanControllerAppliesIndependentPoliciesAndFailsAllOwnedFansSafe(t *test
 	}
 }
 
+func TestFanControllerFailsSafeWhenOwnedFanReportsZeroRPM(t *testing.T) {
+	fake := &fakeSensorIO{values: map[string]int{"/fan3": 0, "/pwm3": 120, "/enable3": 1, "/cpu": 45000}}
+	controller := NewFanController(fake, []hardware.FanChannel{{Number: 3, RPMPath: "/fan3", PWMPath: "/pwm3", EnablePath: "/enable3", Verified: true}}, map[string]string{"cpu": "/cpu"})
+	policy := PolicySet{3: {Mode: ModeFixed, TemperatureSource: "cpu", MinDutyPercent: 35, FixedDutyPercent: 56, CriticalTemperatureC: 80}}
+	if err := controller.Apply(context.Background(), policy); !errors.Is(err, ErrFanStopped) {
+		t.Fatalf("Apply error = %v; want ErrFanStopped", err)
+	}
+	if fake.values["/pwm3"] != 255 {
+		t.Fatalf("stopped fan PWM = %d; want 255", fake.values["/pwm3"])
+	}
+}
+
 func TestMonitorModeNeverWrites(t *testing.T) {
 	fake := &fakeSensorIO{values: map[string]int{"/fan2": 3550, "/pwm2": 143, "/enable2": 1}}
 	controller := NewFanController(fake, []hardware.FanChannel{{Number: 2, RPMPath: "/fan2", PWMPath: "/pwm2", EnablePath: "/enable2", Verified: true}}, nil)

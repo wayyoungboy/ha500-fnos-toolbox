@@ -61,3 +61,26 @@ func TestConflictPreventsVerificationAndControlledPolicy(t *testing.T) {
 		t.Fatalf("monitor policy should remain available during a conflict: %v", err)
 	}
 }
+
+func TestUnsupportedHardwareCannotVerifyOrTakeFanControl(t *testing.T) {
+	root := t.TempDir()
+	service, err := New(Options{
+		SysRoot:       root,
+		CPUInfoPath:   filepath.Join(root, "proc/cpuinfo"),
+		SettingsPath:  filepath.Join(root, "var/settings.json"),
+		LogPath:       filepath.Join(root, "var/toolbox.log"),
+		Version:       "0.1.0",
+		ConflictCheck: func() string { return "" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	if _, err := service.VerifyFan(context.Background(), 3, false); !errors.Is(err, ErrUnsupportedHardware) {
+		t.Fatalf("VerifyFan error = %v; want ErrUnsupportedHardware", err)
+	}
+	policy := control.FanPolicy{Mode: control.ModeFixed, TemperatureSource: "cpu", MinDutyPercent: 35, FixedDutyPercent: 56, CriticalTemperatureC: 80}
+	if err := service.SetFanPolicy(context.Background(), 3, policy); !errors.Is(err, ErrUnsupportedHardware) {
+		t.Fatalf("SetFanPolicy error = %v; want ErrUnsupportedHardware", err)
+	}
+}
