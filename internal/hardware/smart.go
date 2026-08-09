@@ -135,6 +135,12 @@ func (reader *SmartctlReader) Read(ctx context.Context, device string) (SMARTIde
 		}
 		return SMARTIdentity{}, fmt.Errorf("decode smartctl %s JSON: %w", device, err)
 	}
+	if runErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) || exitErr.ExitCode() < 0 || exitErr.ExitCode()&0x07 != 0 {
+			return SMARTIdentity{}, fmt.Errorf("smartctl %s reported an operational failure: %w", device, runErr)
+		}
+	}
 	payload.Serial = strings.TrimSpace(payload.Serial)
 	if payload.Serial == "" {
 		return SMARTIdentity{}, fmt.Errorf("smartctl %s returned no disk serial", device)
