@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -34,11 +35,33 @@ type SMARTReader interface {
 }
 
 type SmartctlReader struct {
-	executable string
+	executable  string
+	timeout     time.Duration
+	outputLimit int
+	errorLimit  int
 }
 
 func NewSmartctlReader(executable string) *SmartctlReader {
-	return &SmartctlReader{executable: executable}
+	return NewSmartctlReaderWithOptions(executable, SmartctlReaderOptions{})
+}
+
+type SmartctlReaderOptions struct {
+	Timeout     time.Duration
+	OutputLimit int
+	ErrorLimit  int
+}
+
+func NewSmartctlReaderWithOptions(executable string, options SmartctlReaderOptions) *SmartctlReader {
+	if options.Timeout <= 0 {
+		options.Timeout = smartctlTimeout
+	}
+	if options.OutputLimit <= 0 {
+		options.OutputLimit = smartctlOutputLimit
+	}
+	if options.ErrorLimit <= 0 {
+		options.ErrorLimit = 8 << 10
+	}
+	return &SmartctlReader{executable: executable, timeout: options.Timeout, outputLimit: options.OutputLimit, errorLimit: options.ErrorLimit}
 }
 
 type cappedBuffer struct {
@@ -69,12 +92,24 @@ func (reader *SmartctlReader) Read(ctx context.Context, device string) (SMARTIde
 	if reader.executable == "" {
 		return SMARTIdentity{}, errors.New("smartctl executable is not configured")
 	}
-	commandContext, cancel := context.WithTimeout(ctx, smartctlTimeout)
+	commandContext, cancel := context.WithTimeout(ctx, reader.timeout)
 	defer cancel()
-	command := exec.CommandContext(commandContext, reader.executable, "-n", "standby,0", "-j", "-a", "/dev/"+device)
+	command := exec.CommandContext(commandContext, reader.executable, "-d", "sat", "-n", "standby,0", "-j", "-a", "/dev/"+device)
 	command.Env = append(command.Environ(), "LC_ALL=C")
-	stdout := &cappedBuffer{limit: smartctlOutputLimit}
-	stderr := &cappedBuffer{limit: 8 << 10}
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error {
+		if command.Process == nil {
+			return nil
+		}
+		err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return nil
+		}
+		return err
+	}
+	command.WaitDelay = time.Second
+	stdout := &cappedBuffer{limit: reader.outputLimit}
+	stderr := &cappedBuffer{limit: reader.errorLimit}
 	command.Stdout = stdout
 	command.Stderr = stderr
 	runErr := command.Run()
@@ -82,7 +117,7 @@ func (reader *SmartctlReader) Read(ctx context.Context, device string) (SMARTIde
 		return SMARTIdentity{}, fmt.Errorf("smartctl %s: %w", device, commandContext.Err())
 	}
 	if stdout.truncated {
-		return SMARTIdentity{}, fmt.Errorf("smartctl %s JSON exceeds %d bytes", device, smartctlOutputLimit)
+		return SMARTIdentity{}, fmt.Errorf("smartctl %s JSON exceeds %d bytes", device, reader.outputLimit)
 	}
 
 	var payload struct {
