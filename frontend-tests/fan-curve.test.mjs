@@ -104,5 +104,10 @@ test("fan editor exposes decimal temperature inputs and selected-state semantics
   );
 
   assert.match(application, /step="any"/);
+  assert.match(application, /data-temp type="number" step="any"/);
+  assert.doesNotMatch(
+    application,
+    /id="critical-temperature"[^>]*step="any"/,
+  );
   assert.match(application, /aria-pressed=/);
 });
