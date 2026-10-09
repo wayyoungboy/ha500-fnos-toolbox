@@ -7,6 +7,28 @@
 > [!WARNING]
 > 当前为测试阶段，只在一台奥睿科 HA500 上验证。硬件控制存在风扇停转、过热、数据损坏或设备异常的风险；使用者应自行确认型号、做好数据备份并承担风险。本项目不提供任何明示或暗示担保。
 
+
+## 安装 / 获取 FPK
+
+本仓库 **GitHub Releases 暂无已发布的 FPK**（Releases=0）。路人请优先使用继任产品：
+
+1. 打开 [wayyoung_toolbox Releases](https://github.com/wayyoungboy/wayyoung_toolbox/releases)
+2. 下载最新的 `wayyoung_toolbox_*_x86_64.fpk`
+3. 在 fnOS 应用中心选择「手动安装」并上传该包
+4. 安装后启用 **HA500 硬件工具** 模块（需 root，并输入 `HA500` 确认型号）
+
+若你只想在本仓库从源码打 FPK（开发/自建）：
+
+```bash
+make test
+make stage
+FNPACK=/path/to/fnpack make build
+```
+
+需要 fnOS SDK 中的 `fnpack`。没有 `fnpack` 时 `make stage` 只会生成并校验包目录，不会产出可安装的 `.fpk`。
+
+从旧的「HA500 硬盘灯」(`ha500_led` / [fnos-ha500-led](https://github.com/wayyoungboy/fnos-ha500-led)) 迁移时，请先卸载旧应用，再安装 wayyoung_toolbox 或本仓库自建包，两个应用不得同时控制同一组 GPIO。
+
 ## 界面预览
 
 ![工具箱概览](docs/design/overview-render.png)
