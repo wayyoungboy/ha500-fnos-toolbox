@@ -94,7 +94,7 @@ def main() -> int:
             ensure(bool(command.stat().st_mode & stat.S_IXUSR), f"{command.name} is not executable")
     binary = PACKAGE / "app/bin/ha500-toolbox"
     ensure(bool(binary.stat().st_mode & stat.S_IXUSR), "service binary is not executable")
-    ensure(go_version(binary) >= (1, 25, 12), "service must use Go 1.25.12 or newer")
+    ensure(go_version(binary) >= (1, 26, 11), "service must use Go 1.26.11 or newer")
 
     sources = [
         *(ROOT / "cmd").rglob("*.go"),

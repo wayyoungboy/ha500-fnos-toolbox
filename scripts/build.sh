@@ -11,7 +11,7 @@ STAGE_ONLY=false
 BUILD_TEMP="$(mktemp -d)"
 trap 'rm -rf -- "${BUILD_TEMP}"' EXIT
 
-GOTOOLCHAIN=go1.25.12 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+GOTOOLCHAIN=go1.26.11 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
     -o "${BUILD_TEMP}/ha500-toolbox" "${ROOT}/cmd/ha500-toolbox"
 mkdir -p "$(dirname "${BINARY}")"
